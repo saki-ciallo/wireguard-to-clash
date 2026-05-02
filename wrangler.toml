@@ -1,4 +1,4 @@
-name = "wg-sub"
+name = "wireguard-to-clash"
 main = "_worker.js"
 compatibility_date = "2026-05-01"
 keep_vars = true
