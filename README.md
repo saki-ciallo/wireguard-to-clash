@@ -4,61 +4,60 @@ A Cloudflare Worker that converts WireGuard subscription links into Clash YAML c
 
 ## Features
 
-- Parse `wireguard://` links and generate Clash proxy nodes
+- Parse `wireguard://` and `wg://` links
 - Support multiple links (one per line)
 - Fetch Clash template from a URL
 - Token-based access control
-- Data stored in Cloudflare Workers KV
+- Optional KV storage or direct env variables
 
 ## Deployment
 
 ### 1. Fork this repository
-<!--
-### 2. Create KV Namespace
-
-Cloudflare Dashboard → Storage & databases → Wokers KV → Create Instance (e.g. `wg-kv`) -->
 
 ### 2. Create Worker
 
 Cloudflare Dashboard → Compute → Workers & Pages → Create application → Continue with GitHub → Select the forked repository → Deploy
 
-### 3. Configure Worker Settings
+### 3. Configure Environment Variables
 
-<!--**KV Namespace Bindings** (Workers & Pages (e.g. `wireguard-to-clash`) → Bindings → Add a binding → KV Namespace):
+Workers & Pages → Settings → Variables and Secrets → Environment Variables:
 
-| Variable name | KV namespace |
-|---|---|
-| `KV` | `wg-kv` |-->
+| Name | Required | Description |
+|---|---|---|
+| `TOKEN` | Yes | Access token |
+| `LINK` | Yes | WireGuard links, one per line |
+| `SUBCONFIG` | Yes | Clash template URL |
+| `SUBUPTIME` | No | Update interval in hours (default: 6) |
 
-**Environment Variables** (Workers & Pages → Settings → Variables and Secrets → Environment Variables):
+## Link Formats
 
-| Name | Description |
-|---|---|
-| `TOKEN` | Access token (required) |
-| `LINK` | `wireguard://...` |
-| `SUBCONFIG` | Clash template URL (e.g. `https://raw.githubusercontent.com/.../clash.yaml`) |
-| `SUBUPTIME` | Option. Update interval in hours (default: 6) |
-
-<!-- > KV Namespace Bindings and Environment Variables are different sections. KV uses `env.KV.get()`, env vars use `env.TOKEN`.
-
-### 4. Add KV Data
-
-In your KV namespace, add entries:
-
-- **Key:** `LINK.txt` — **Value:** WireGuard links, one per line
-- **Key:** `SUBCONFIG` — **Value:** Clash template URL (optional if set in env) -->
-
-## WireGuard Link Format
+### Format A (Short)
 
 ```
 wireguard://PRIVATEKEY@SERVER:PORT?publickey=PUBLICKEY&address=IP/CIDR&mtu=MTU#NAME
 ```
 
-Example:
+### Format B (Standard)
 
 ```
-wireguard://abc123=@1.2.3.4:51820?publickey=xyz789=&address=10.0.0.2/32&mtu=1420#my-node
+wg://SERVER:PORT?publicKey=PUBLICKEY&privateKey=PRIVATEKEY&presharedKey=KEY&ip=IP&flag=US&udp=1#NAME
 ```
+
+
+### Parameters
+
+| Parameter | Format A | Format B | Description |
+|---|---|---|---|
+| `privateKey` | userinfo | query | Private key |
+| `publicKey` | `publickey` | `publicKey` | Public key |
+| `presharedKey` | — | `presharedKey` | Pre-shared key |
+| `address` / `ip` | `address` | `ip` | Local IP (v4,v6) |
+| `mtu` | optional | optional | MTU (default: 1280) |
+| `udp` | — | optional | UDP relay, default `true` |
+| `flag` | — | optional | Prefix for node name |
+| `#NAME` | hash | hash | Node display name |
+
+The `remote-dns-resolve` set to `false` as default.
 
 ## Access
 
@@ -71,9 +70,9 @@ Use this URL as a Clash subscription link.
 
 ## Output Format
 
-Controlled by `COMPACT_OUTPUT` at the top of the file:
+Edit `COMPACT_OUTPUT` in `3_worker.js`:
 
-- `false` (default): standard YAML format
+- `false`: standard YAML format
 - `true`: compact JSON format
 
 ## Acknowledgements
@@ -81,5 +80,6 @@ Controlled by `COMPACT_OUTPUT` at the top of the file:
 - [wireguard-subconverter-worker](https://github.com/juerson/wireguard-subconverter-worker)
 - [CF-Workers-SUB](https://github.com/cmliu/CF-Workers-SUB)
 - [mihomo_yamls](https://github.com/HenryChiao/mihomo_yamls)
+- [Mihomo_wireguard](https://wiki.metacubex.one/config/proxies/wg/#_2)
 
-Powered by GLM-5.1
+Powered by GLM-5.1, Kimi K2.6
