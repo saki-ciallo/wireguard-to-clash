@@ -50,7 +50,7 @@ export default {
 
       if (proxyName && clashNode) {
         parsedNodes.push(clashNode);
-        proxyNames.push(`      - ${JSON.stringify(proxyName)}`);
+        proxyNames.push(`      - ${proxyName}`);
       }
     }
 
@@ -248,8 +248,33 @@ function buildClashNode(wireguard) {
     node.ipv6 = `${wireguard.ipv6}`;
   }
 
-  const compressedJsonString = JSON.stringify(node).replace(/\s+/g, "");
-  return [name, `  - ${compressedJsonString}`];
+  return [name, formatYamlNode(node)];
+}
+
+function formatYamlNode(node) {
+  const lines = ["  - "];
+  let first = true;
+  for (const [key, value] of Object.entries(node)) {
+    if (value === undefined) continue;
+    const prefix = first ? "    " : "    ";
+    const yamlValue = toYamlValue(value);
+    lines.push(`${prefix}${key}: ${yamlValue}`);
+    first = false;
+  }
+  return lines.join("\n");
+}
+
+function toYamlValue(value) {
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) return `[${value.join(", ")}]`;
+  if (typeof value === "string") {
+    if (/[:{}[\],&*?|>!%#`@\\]/.test(value) || value === "" || /^\d/.test(value) || value !== value.trim()) {
+      return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    }
+    return value;
+  }
+  return String(value);
 }
 
 function injectClashNodesIntoTemplate(template, clashNodes, proxyNames) {
