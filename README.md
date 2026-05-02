@@ -13,22 +13,22 @@ A Cloudflare Worker that converts WireGuard subscription links into Clash YAML c
 ## Deployment
 
 ### 1. Fork this repository
-
+<!--
 ### 2. Create KV Namespace
 
-Cloudflare Dashboard → Storage & databases → Wokers KV → Create Instance (e.g. `wg-kv`)
+Cloudflare Dashboard → Storage & databases → Wokers KV → Create Instance (e.g. `wg-kv`) -->
 
-### 3. Create Worker
+### 2. Create Worker
 
 Cloudflare Dashboard → Compute → Workers & Pages → Create application → Continue with GitHub → Select the forked repository → Deploy
 
-### 4. Configure Worker Settings
+### 3. Configure Worker Settings
 
-**KV Namespace Bindings** (Workers & Pages (e.g. `wireguard-to-clash`) → Bindings → Add a binding → KV Namespace):
+<!--**KV Namespace Bindings** (Workers & Pages (e.g. `wireguard-to-clash`) → Bindings → Add a binding → KV Namespace):
 
 | Variable name | KV namespace |
 |---|---|
-| `KV` | `wg-kv` |
+| `KV` | `wg-kv` |-->
 
 **Environment Variables** (Workers & Pages → Settings → Variables and Secrets → Environment Variables):
 
