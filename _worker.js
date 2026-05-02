@@ -40,14 +40,14 @@ export default {
     const proxyNames = [];
     const usedNames = new Set();
 
-    for (let index = 0; index < wireguardLinks.length; index++) {
-      const parsedLink = parseWireGuardLink(wireguardLinks[index]);
-      if (!parsedLink) {
-        continue;
-      }
+    const sortedLinks = wireguardLinks
+      .map((link, index) => ({ link, index, parsed: parseWireGuardLink(link) }))
+      .filter((item) => item.parsed)
+      .sort((a, b) => compareWireGuardNames(a.parsed.name, b.parsed.name, a.index, b.index));
 
-      const uniqueName = makeUniqueProxyName(parsedLink.name, usedNames, index);
-      const [proxyName, clashNode] = buildClashNode({ ...parsedLink, name: uniqueName });
+    for (const item of sortedLinks) {
+      const uniqueName = makeUniqueProxyName(item.parsed.name, usedNames, item.index);
+      const [proxyName, clashNode] = buildClashNode({ ...item.parsed, name: uniqueName });
 
       if (proxyName && clashNode) {
         parsedNodes.push(clashNode);
@@ -134,24 +134,48 @@ function parseWireGuardLinkList(text) {
   const links = raw
     .split(/\r?\n|\|/)
     .map((item) => item.trim())
-    .filter((item) => item.toLowerCase().startsWith("wireguard://"));
+    .filter((item) => {
+      const lower = item.toLowerCase();
+      return lower.startsWith("wireguard://") || lower.startsWith("wg://");
+    });
 
   return [...new Set(links)];
 }
 
 function parseWireGuardLink(link) {
   const cleanedLink = (link || "").trim();
-  if (!cleanedLink.toLowerCase().startsWith("wireguard://")) {
+  const lowerLink = cleanedLink.toLowerCase();
+  const isWireGuard = lowerLink.startsWith("wireguard://");
+  const isWg = lowerLink.startsWith("wg://");
+  if (!isWireGuard && !isWg) {
     return null;
   }
 
   try {
     const parsedUrl = new URL(cleanedLink);
-    const addressInfo = parseWireGuardAddress(decodeSafe(parsedUrl.searchParams.get("address") || ""));
-    const reserved = parseWireGuardReserved(decodeSafe(parsedUrl.searchParams.get("reserved") || ""));
-    const privateKey = decodeSafe(parsedUrl.username || "");
-    const publicKey = decodeSafe(parsedUrl.searchParams.get("publickey") || parsedUrl.searchParams.get("publicKey") || "");
-    const remark = decodeSafe((parsedUrl.hash || "").replace(/^#/, "")) || `wireguard-${parsedUrl.hostname}:${parsedUrl.port}`;
+    const sp = parsedUrl.searchParams;
+
+    const addressInfo = parseWireGuardAddress(
+      decodeSafe(sp.get("address") || sp.get("ip") || "")
+    );
+    const reserved = parseWireGuardReserved(decodeSafe(sp.get("reserved") || ""));
+
+    let privateKey = decodeSafe(parsedUrl.username || "");
+    if (!privateKey) {
+      privateKey = decodeSafe(sp.get("privatekey") || sp.get("privateKey") || "");
+    }
+
+    const publicKey = decodeSafe(sp.get("publickey") || sp.get("publicKey") || "");
+    const presharedKey = decodeSafe(sp.get("presharedkey") || sp.get("presharedKey") || "");
+    const flag = decodeSafe(sp.get("flag") || "");
+
+    const rawUdp = sp.get("udp");
+    const udp = rawUdp === null ? true : rawUdp === "1" || rawUdp.toLowerCase() === "true";
+
+    let remark = decodeSafe((parsedUrl.hash || "").replace(/^#/, ""));
+    if (!remark) {
+      remark = flag ? `${flag}-${parsedUrl.hostname}` : `wireguard-${parsedUrl.hostname}:${parsedUrl.port}`;
+    }
 
     return {
       name: remark,
@@ -159,30 +183,65 @@ function parseWireGuardLink(link) {
       port: Number(parsedUrl.port || 0),
       privateKey,
       publicKey,
+      presharedKey,
       ip: addressInfo.ip,
       ipv6: addressInfo.ipv6,
-      mtu: Number(parsedUrl.searchParams.get("mtu") || 1280),
-      reserved
+      mtu: Number(sp.get("mtu") || 1280),
+      reserved,
+      udp
     };
   } catch (error) {
-    const match = cleanedLink.match(/^wireguard:\/\/([^@]+)@([^/?#]+)(?::(\d+))?\/?\?(.*?)(?:#(.*))?$/i);
+    let match;
+    if (isWireGuard) {
+      match = cleanedLink.match(/^wireguard:\/\/([^@]+)@([^/?#]+)(?::(\d+))?\/?\?(.*?)(?:#(.*))?$/i);
+    } else {
+      match = cleanedLink.match(/^wg:\/\/([^/?#]+)(?::(\d+))?\/?\?(.*?)(?:#(.*))?$/i);
+    }
     if (!match) {
       return null;
     }
 
-    const query = new URLSearchParams(match[4] || "");
-    const addressInfo = parseWireGuardAddress(decodeSafe(query.get("address") || ""));
+    const queryIndex = isWireGuard ? 4 : 3;
+    const query = new URLSearchParams(match[queryIndex] || "");
+    const addressInfo = parseWireGuardAddress(
+      decodeSafe(query.get("address") || query.get("ip") || "")
+    );
+
+    let privateKey;
+    if (isWireGuard) {
+      privateKey = decodeSafe(match[1] || "");
+    } else {
+      privateKey = decodeSafe(query.get("privatekey") || query.get("privateKey") || "");
+    }
+
+    const publicKey = decodeSafe(query.get("publickey") || query.get("publicKey") || "");
+    const presharedKey = decodeSafe(query.get("presharedkey") || query.get("presharedKey") || "");
+    const flag = decodeSafe(query.get("flag") || "");
+
+    const rawUdp = query.get("udp");
+    const udp = rawUdp === null ? true : rawUdp === "1" || rawUdp.toLowerCase() === "true";
+
+    const serverIndex = isWireGuard ? 2 : 1;
+    const portIndex = isWireGuard ? 3 : 2;
+    const hashIndex = isWireGuard ? 5 : 4;
+
+    let remark = decodeSafe(match[hashIndex] || "");
+    if (!remark) {
+      remark = flag ? `${flag}-${match[serverIndex]}` : `wireguard-${match[serverIndex]}:${match[portIndex] || 0}`;
+    }
 
     return {
-      name: decodeSafe(match[5] || "") || `wireguard-${match[2]}:${match[3] || 0}`,
-      server: match[2],
-      port: Number(match[3] || 0),
-      privateKey: decodeSafe(match[1] || ""),
-      publicKey: decodeSafe(query.get("publickey") || query.get("publicKey") || ""),
+      name: remark,
+      server: match[serverIndex],
+      port: Number(match[portIndex] || 0),
+      privateKey,
+      publicKey,
+      presharedKey,
       ip: addressInfo.ip,
       ipv6: addressInfo.ipv6,
       mtu: Number(query.get("mtu") || 1280),
-      reserved: parseWireGuardReserved(decodeSafe(query.get("reserved") || ""))
+      reserved: parseWireGuardReserved(decodeSafe(query.get("reserved") || "")),
+      udp
     };
   }
 }
@@ -230,6 +289,42 @@ function makeUniqueProxyName(name, usedNames, index) {
   return uniqueName;
 }
 
+function compareWireGuardNames(a, b, indexA, indexB) {
+  const keyA = getWireGuardSortKey(a, indexA);
+  const keyB = getWireGuardSortKey(b, indexB);
+
+  if (keyA.group !== keyB.group) {
+    return keyA.group - keyB.group;
+  }
+
+  const nameCompare = keyA.prefix.localeCompare(keyB.prefix, "en", {
+    numeric: true,
+    sensitivity: "base"
+  });
+
+  if (nameCompare !== 0) {
+    return nameCompare;
+  }
+
+  return indexA - indexB;
+}
+
+function getWireGuardSortKey(name, index) {
+  const text = (name || "").trim() || `wireguard-${index + 1}`;
+  const prefixMatch = text.match(/^[A-Za-z0-9]+/);
+  const prefix = prefixMatch ? prefixMatch[0] : text;
+  const firstChar = prefix.charAt(0);
+
+  let group = 2;
+  if (/^[A-Za-z]/.test(firstChar)) {
+    group = 0;
+  } else if (/^[0-9]/.test(firstChar)) {
+    group = 1;
+  }
+
+  return { group, prefix: prefix.toLowerCase() };
+}
+
 function buildClashNode(wireguard) {
   const name = wireguard.name || `wg-${wireguard.server}:${wireguard.port}`;
   const node = {
@@ -241,13 +336,17 @@ function buildClashNode(wireguard) {
     "private-key": `${wireguard.privateKey || ""}`,
     "public-key": `${wireguard.publicKey || ""}`,
     reserved: Array.isArray(wireguard.reserved) && wireguard.reserved.length > 0 ? wireguard.reserved : undefined,
-    udp: true,
+    udp: wireguard.udp !== false,
     "remote-dns-resolve": false,
     mtu: Number(wireguard.mtu || 1280)
   };
 
   if (wireguard.ipv6) {
     node.ipv6 = `${wireguard.ipv6}`;
+  }
+
+  if (wireguard.presharedKey) {
+    node["pre-shared-key"] = `${wireguard.presharedKey}`;
   }
 
   return [name, COMPACT_OUTPUT
