@@ -64,6 +64,18 @@ export default {
     }
 
     const clashConfig = injectClashNodesIntoTemplate(template, parsedNodes, proxyNames);
+
+    // 如需开启 base64 混淆输出，取消下方注释并注释掉明文返回部分
+    const base64Data = encodeBase64(clashConfig);
+    return new Response(base64Data, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Profile-Update-Interval": `${env.SUBUPTIME || DEFAULT_SUBUPTIME}`,
+        "Profile-web-page-url": request.url.includes("?") ? request.url.split("?")[0] : request.url
+      }
+    });
+
     return new Response(clashConfig, {
       status: 200,
       headers: {
@@ -259,4 +271,24 @@ function injectClashNodesIntoTemplate(template, clashNodes, proxyNames) {
 
   config = config.replace(/^ {6}- 01$/gm, proxyNames.join("\n"));
   return config;
+}
+
+function encodeBase64(data) {
+  const binary = new TextEncoder().encode(data);
+  let base64 = "";
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+  for (let i = 0; i < binary.length; i += 3) {
+    const byte1 = binary[i];
+    const byte2 = binary[i + 1] || 0;
+    const byte3 = binary[i + 2] || 0;
+
+    base64 += chars[byte1 >> 2];
+    base64 += chars[((byte1 & 3) << 4) | (byte2 >> 4)];
+    base64 += chars[((byte2 & 15) << 2) | (byte3 >> 6)];
+    base64 += chars[byte3 & 63];
+  }
+
+  const padding = 3 - (binary.length % 3 || 3);
+  return base64.slice(0, base64.length - padding) + "==".slice(0, padding);
 }
