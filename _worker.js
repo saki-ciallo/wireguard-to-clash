@@ -242,7 +242,7 @@ function buildClashNode(wireguard) {
     "public-key": `${wireguard.publicKey || ""}`,
     reserved: Array.isArray(wireguard.reserved) && wireguard.reserved.length > 0 ? wireguard.reserved : undefined,
     udp: true,
-    "remote-dns-resolve": true,
+    "remote-dns-resolve": false,
     mtu: Number(wireguard.mtu || 1280)
   };
 
