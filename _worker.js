@@ -40,14 +40,14 @@ export default {
     const proxyNames = [];
     const usedNames = new Set();
 
-    for (let index = 0; index < wireguardLinks.length; index++) {
-      const parsedLink = parseWireGuardLink(wireguardLinks[index]);
-      if (!parsedLink) {
-        continue;
-      }
+    const sortedLinks = wireguardLinks
+      .map((link, index) => ({ link, index, parsed: parseWireGuardLink(link) }))
+      .filter((item) => item.parsed)
+      .sort((a, b) => compareWireGuardNames(a.parsed.name, b.parsed.name, a.index, b.index));
 
-      const uniqueName = makeUniqueProxyName(parsedLink.name, usedNames, index);
-      const [proxyName, clashNode] = buildClashNode({ ...parsedLink, name: uniqueName });
+    for (const item of sortedLinks) {
+      const uniqueName = makeUniqueProxyName(item.parsed.name, usedNames, item.index);
+      const [proxyName, clashNode] = buildClashNode({ ...item.parsed, name: uniqueName });
 
       if (proxyName && clashNode) {
         parsedNodes.push(clashNode);
@@ -228,6 +228,42 @@ function makeUniqueProxyName(name, usedNames, index) {
 
   usedNames.add(uniqueName);
   return uniqueName;
+}
+
+function compareWireGuardNames(a, b, indexA, indexB) {
+  const keyA = getWireGuardSortKey(a, indexA);
+  const keyB = getWireGuardSortKey(b, indexB);
+
+  if (keyA.group !== keyB.group) {
+    return keyA.group - keyB.group;
+  }
+
+  const nameCompare = keyA.prefix.localeCompare(keyB.prefix, "en", {
+    numeric: true,
+    sensitivity: "base"
+  });
+
+  if (nameCompare !== 0) {
+    return nameCompare;
+  }
+
+  return indexA - indexB;
+}
+
+function getWireGuardSortKey(name, index) {
+  const text = (name || "").trim() || `wireguard-${index + 1}`;
+  const prefixMatch = text.match(/^[A-Za-z0-9]+/);
+  const prefix = prefixMatch ? prefixMatch[0] : text;
+  const firstChar = prefix.charAt(0);
+
+  let group = 2;
+  if (/^[A-Za-z]/.test(firstChar)) {
+    group = 0;
+  } else if (/^[0-9]/.test(firstChar)) {
+    group = 1;
+  }
+
+  return { group, prefix: prefix.toLowerCase() };
 }
 
 function buildClashNode(wireguard) {
