@@ -252,14 +252,17 @@ function buildClashNode(wireguard) {
 }
 
 function formatYamlNode(node) {
-  const lines = ["  - "];
+  const lines = [];
   let first = true;
   for (const [key, value] of Object.entries(node)) {
     if (value === undefined) continue;
-    const prefix = first ? "    " : "    ";
     const yamlValue = toYamlValue(value);
-    lines.push(`${prefix}${key}: ${yamlValue}`);
-    first = false;
+    if (first) {
+      lines.push(`  - ${key}: ${yamlValue}`);
+      first = false;
+    } else {
+      lines.push(`    ${key}: ${yamlValue}`);
+    }
   }
   return lines.join("\n");
 }
