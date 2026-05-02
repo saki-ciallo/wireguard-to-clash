@@ -1,4 +1,5 @@
 const DEFAULT_SUBUPTIME = 6;
+const COMPACT_OUTPUT = true; // true: 紧凑JSON格式 {"name":"..."}, false: 标准YAML格式
 
 export default {
   async fetch(request, env) {
@@ -66,15 +67,15 @@ export default {
     const clashConfig = injectClashNodesIntoTemplate(template, parsedNodes, proxyNames);
 
     // 如需开启 base64 混淆输出，取消下方注释并注释掉明文返回部分
-    // const base64Data = encodeBase64(clashConfig);
-    // return new Response(base64Data, {
-    //   status: 200,
-    //   headers: {
-    //     "Content-Type": "text/plain; charset=utf-8",
-    //     "Profile-Update-Interval": `${env.SUBUPTIME || DEFAULT_SUBUPTIME}`,
-    //     "Profile-web-page-url": request.url.includes("?") ? request.url.split("?")[0] : request.url
-    //   }
-    // });
+    const base64Data = encodeBase64(clashConfig);
+    return new Response(base64Data, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Profile-Update-Interval": `${env.SUBUPTIME || DEFAULT_SUBUPTIME}`,
+        "Profile-web-page-url": request.url.includes("?") ? request.url.split("?")[0] : request.url
+      }
+    });
 
     return new Response(clashConfig, {
       status: 200,
@@ -248,7 +249,10 @@ function buildClashNode(wireguard) {
     node.ipv6 = `${wireguard.ipv6}`;
   }
 
-  return [name, formatYamlNode(node)];
+  return [name, COMPACT_OUTPUT
+    ? `  - ${JSON.stringify(node).replace(/\s+/g, "")}`
+    : formatYamlNode(node)
+  ];
 }
 
 function formatYamlNode(node) {
