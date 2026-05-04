@@ -1,6 +1,6 @@
 # WireGuard to Clash Subscription Converter
 
-A Cloudflare Worker that converts WireGuard subscription links into Clash YAML config.
+A Cloudflare Worker that converts WireGuard subscription links into Clash subscriptions.
 
 ## Features
 
@@ -26,8 +26,9 @@ Workers & Pages → Settings → Variables and Secrets → Environment Variables
 |---|---|---|
 | `TOKEN` | Yes | Access token |
 | `LINK` | Yes | WireGuard links, one per line |
-| `SUBCONFIG` | Yes | Clash template URL |
+| `SUBCONFIG` | Yes | Clash template (.yaml) URL |
 | `SUBUPTIME` | No | Update interval in hours (default: 6) |
+| `COMPACT_OUTPUT` | No | `true` for compact JSON, `false` for YAML (default: `false`) |
 
 ## Link Formats
 
@@ -40,7 +41,7 @@ wireguard://PRIVATEKEY@SERVER:PORT?publickey=PUBLICKEY&address=IP/CIDR&mtu=MTU#N
 ### Format B (Standard)
 
 ```
-wg://SERVER:PORT?publicKey=PUBLICKEY&privateKey=PRIVATEKEY&presharedKey=KEY&ip=IP&flag=US&udp=1#NAME
+wg://SERVER:PORT?publicKey=PUBLICKEY&privateKey=PRIVATEKEY&presharedKey=KEY&ip=IP&mtu=MTU&dns=DNS1,DNS2&flag=US&udp=1#NAME
 ```
 
 
@@ -55,9 +56,10 @@ wg://SERVER:PORT?publicKey=PUBLICKEY&privateKey=PRIVATEKEY&presharedKey=KEY&ip=I
 | `mtu` | optional | optional | MTU (default: 1280) |
 | `udp` | — | optional | UDP relay, default `true` |
 | `flag` | — | optional | Prefix for node name |
+| `dns` | — | optional | DNS list, e.g. `1.1.1.1,8.8.8.8` |
 | `#NAME` | hash | hash | Node display name |
 
-The `remote-dns-resolve` set to `false` as default.
+`remote-dns-resolve` is `true` when `dns` exists, otherwise `false`.
 
 ## Access
 
@@ -70,10 +72,16 @@ Use this URL as a Clash subscription link.
 
 ## Output Format
 
-Edit `COMPACT_OUTPUT` in `3_worker.js`:
+Controlled by the `COMPACT_OUTPUT` environment variable:
 
-- `false`: standard YAML format
+- `false` (default): standard YAML format
 - `true`: compact JSON format
+
+## Notes
+
+- `dns` is copied into the Clash node as an inline list.
+- `pre-shared-key` is supported in `wg://` links. Normally, the Clash config won't use this Key.
+- `remote-dns-resolve` follows whether `dns` is present.
 
 ## Acknowledgements
 
