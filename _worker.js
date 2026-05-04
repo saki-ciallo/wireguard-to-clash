@@ -362,7 +362,7 @@ function buildClashNode(wireguard, compactOutput) {
   }
 
   if (wireguard.dns) {
-    node.dns = `[${wireguard.dns.join(",")}]`;
+    node.dns = wireguard.dns;
   }
 
   return [name, compactOutput
@@ -390,13 +390,8 @@ function formatYamlNode(node) {
 function toYamlValue(value) {
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return String(value);
-  if (Array.isArray(value)) return `[${value.join(", ")}]`;
-  if (typeof value === "string") {
-    if (/[:{}[\],&*?|>!%#`@\\]/.test(value) || value === "" || /^\d/.test(value) || value !== value.trim()) {
-      return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-    }
-    return value;
-  }
+  if (Array.isArray(value)) return `[${value.join(",")}]`;
+  if (typeof value === "string") return value;
   return String(value);
 }
 
