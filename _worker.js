@@ -168,6 +168,7 @@ function parseWireGuardLink(link) {
     const publicKey = decodeSafe(sp.get("publickey") || sp.get("publicKey") || "");
     const presharedKey = decodeSafe(sp.get("presharedkey") || sp.get("presharedKey") || "");
     const flag = decodeSafe(sp.get("flag") || "");
+    const dns = parseWireGuardDns(decodeSafe(sp.get("dns") || ""));
 
     const rawUdp = sp.get("udp");
     const udp = rawUdp === null ? true : rawUdp === "1" || rawUdp.toLowerCase() === "true";
@@ -186,6 +187,7 @@ function parseWireGuardLink(link) {
       presharedKey,
       ip: addressInfo.ip,
       ipv6: addressInfo.ipv6,
+      dns,
       mtu: Number(sp.get("mtu") || 1280),
       reserved,
       udp
@@ -217,6 +219,7 @@ function parseWireGuardLink(link) {
     const publicKey = decodeSafe(query.get("publickey") || query.get("publicKey") || "");
     const presharedKey = decodeSafe(query.get("presharedkey") || query.get("presharedKey") || "");
     const flag = decodeSafe(query.get("flag") || "");
+    const dns = parseWireGuardDns(decodeSafe(query.get("dns") || ""));
 
     const rawUdp = query.get("udp");
     const udp = rawUdp === null ? true : rawUdp === "1" || rawUdp.toLowerCase() === "true";
@@ -239,6 +242,7 @@ function parseWireGuardLink(link) {
       presharedKey,
       ip: addressInfo.ip,
       ipv6: addressInfo.ipv6,
+      dns,
       mtu: Number(query.get("mtu") || 1280),
       reserved: parseWireGuardReserved(decodeSafe(query.get("reserved") || "")),
       udp
@@ -265,6 +269,14 @@ function parseWireGuardReserved(reserved) {
     .filter(Boolean)
     .map((item) => Number(item))
     .filter((item) => Number.isFinite(item));
+}
+
+function parseWireGuardDns(dns) {
+  const values = (dns || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return values.length > 0 ? values : undefined;
 }
 
 function decodeSafe(text) {
@@ -337,7 +349,7 @@ function buildClashNode(wireguard) {
     "public-key": `${wireguard.publicKey || ""}`,
     reserved: Array.isArray(wireguard.reserved) && wireguard.reserved.length > 0 ? wireguard.reserved : undefined,
     udp: wireguard.udp !== false,
-    "remote-dns-resolve": false,
+    "remote-dns-resolve": !!wireguard.dns,
     mtu: Number(wireguard.mtu || 1280)
   };
 
@@ -347,6 +359,10 @@ function buildClashNode(wireguard) {
 
   if (wireguard.presharedKey) {
     node["pre-shared-key"] = `${wireguard.presharedKey}`;
+  }
+
+  if (wireguard.dns) {
+    node.dns = `[${wireguard.dns.join(",")}]`;
   }
 
   return [name, COMPACT_OUTPUT
