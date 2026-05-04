@@ -173,6 +173,7 @@ function parseWireGuardLink(link) {
     const presharedKey = decodeSafe(sp.get("presharedkey") || sp.get("presharedKey") || "");
     const flag = decodeSafe(sp.get("flag") || "");
     const dns = parseWireGuardDns(decodeSafe(sp.get("dns") || ""));
+    const persistentKeepalive = parseWireGuardKeepalive(sp.get("keepalive") || sp.get("persistentKeepalive") || sp.get("persistent-keepalive") || "");
 
     const rawUdp = sp.get("udp");
     const udp = rawUdp === null ? true : rawUdp === "1" || rawUdp.toLowerCase() === "true";
@@ -192,6 +193,7 @@ function parseWireGuardLink(link) {
       ip: addressInfo.ip,
       ipv6: addressInfo.ipv6,
       dns,
+      persistentKeepalive,
       mtu: Number(sp.get("mtu") || 1280),
       reserved,
       udp
@@ -224,6 +226,7 @@ function parseWireGuardLink(link) {
     const presharedKey = decodeSafe(query.get("presharedkey") || query.get("presharedKey") || "");
     const flag = decodeSafe(query.get("flag") || "");
     const dns = parseWireGuardDns(decodeSafe(query.get("dns") || ""));
+    const persistentKeepalive = parseWireGuardKeepalive(query.get("keepalive") || query.get("persistentKeepalive") || query.get("persistent-keepalive") || "");
 
     const rawUdp = query.get("udp");
     const udp = rawUdp === null ? true : rawUdp === "1" || rawUdp.toLowerCase() === "true";
@@ -247,6 +250,7 @@ function parseWireGuardLink(link) {
       ip: addressInfo.ip,
       ipv6: addressInfo.ipv6,
       dns,
+      persistentKeepalive,
       mtu: Number(query.get("mtu") || 1280),
       reserved: parseWireGuardReserved(decodeSafe(query.get("reserved") || "")),
       udp
@@ -281,6 +285,16 @@ function parseWireGuardDns(dns) {
     .map((item) => item.trim())
     .filter(Boolean);
   return values.length > 0 ? values : undefined;
+}
+
+function parseWireGuardKeepalive(value) {
+  const text = (value || "").trim();
+  if (!text) {
+    return undefined;
+  }
+
+  const keepalive = Number(text);
+  return Number.isFinite(keepalive) ? keepalive : undefined;
 }
 
 function decodeSafe(text) {
@@ -367,6 +381,10 @@ function buildClashNode(wireguard, compactOutput) {
 
   if (wireguard.dns) {
     node.dns = wireguard.dns;
+  }
+
+  if (wireguard.persistentKeepalive !== undefined) {
+    node["persistent-keepalive"] = wireguard.persistentKeepalive;
   }
 
   return [name, compactOutput
