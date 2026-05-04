@@ -81,7 +81,9 @@ export default {
     return new Response(clashConfig, {
       status: 200,
       headers: {
-        "Content-Type": "text/yaml; charset=utf-8",
+        // 标准 YAML 订阅头，兼容 Clash / Mihomo 远程导入
+        // "Content-Type": "text/yaml; charset=utf-8",
+        "Content-Type": "text/plain; charset=utf-8",
         "Profile-Update-Interval": `${env.SUBUPTIME || DEFAULT_SUBUPTIME}`,
         "Profile-web-page-url": request.url.includes("?") ? request.url.split("?")[0] : request.url
       }
