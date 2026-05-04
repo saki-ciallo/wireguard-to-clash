@@ -83,9 +83,9 @@ export default {
     return new Response(clashConfig, {
       status: 200,
       headers: {
-        // 浏览器访问显示 html，订阅客户端保持 plain，兼容 Clash / Mihomo 远程导入
-        // "Content-Type": "text/yaml; charset=utf-8",
-        "Content-Type": userAgent.includes("mozilla") ? "text/html; charset=utf-8" : "text/plain; charset=utf-8",
+        // Clash / Mihomo 客户端返回 yaml，其他客户端返回 plain
+        // "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": (userAgent.includes("clash") || userAgent.includes("mihomo") || userAgent.includes("meta")) ? "text/yaml; charset=utf-8" : "text/plain; charset=utf-8",
         "Profile-Update-Interval": `${env.SUBUPTIME || DEFAULT_SUBUPTIME}`,
         "Profile-web-page-url": request.url.includes("?") ? request.url.split("?")[0] : request.url
       }
