@@ -1,9 +1,9 @@
 const DEFAULT_SUBUPTIME = 6;
-const COMPACT_OUTPUT = true; // true: 紧凑JSON格式 {"name":"..."}, false: 标准YAML格式
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const compactOutput = (env.COMPACT_OUTPUT || "").toLowerCase() === "true";
     const accessToken = env.TOKEN || "";
     const requestToken = url.searchParams.get("token") || url.searchParams.get("pwd") || "";
     const isAuthorized = !accessToken || requestToken === accessToken || url.pathname === `/${accessToken}`;
@@ -47,7 +47,7 @@ export default {
 
     for (const item of sortedLinks) {
       const uniqueName = makeUniqueProxyName(item.parsed.name, usedNames, item.index);
-      const [proxyName, clashNode] = buildClashNode({ ...item.parsed, name: uniqueName });
+      const [proxyName, clashNode] = buildClashNode({ ...item.parsed, name: uniqueName }, compactOutput);
 
       if (proxyName && clashNode) {
         parsedNodes.push(clashNode);
@@ -337,7 +337,7 @@ function getWireGuardSortKey(name, index) {
   return { group, prefix: prefix.toLowerCase() };
 }
 
-function buildClashNode(wireguard) {
+function buildClashNode(wireguard, compactOutput) {
   const name = wireguard.name || `wg-${wireguard.server}:${wireguard.port}`;
   const node = {
     name: `${name}`,
@@ -365,7 +365,7 @@ function buildClashNode(wireguard) {
     node.dns = `[${wireguard.dns.join(",")}]`;
   }
 
-  return [name, COMPACT_OUTPUT
+  return [name, compactOutput
     ? `  - ${JSON.stringify(node).replace(/\s+/g, "")}`
     : formatYamlNode(node)
   ];
