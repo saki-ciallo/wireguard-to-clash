@@ -366,7 +366,7 @@ function buildClashNode(wireguard, compactOutput) {
   }
 
   return [name, compactOutput
-    ? `  - ${JSON.stringify(node).replace(/\s+/g, "")}`
+    ? `  - ${formatCompactNode(node)}`
     : formatYamlNode(node)
   ];
 }
@@ -376,7 +376,10 @@ function formatYamlNode(node) {
   let first = true;
   for (const [key, value] of Object.entries(node)) {
     if (value === undefined) continue;
-    const yamlValue = toYamlValue(value);
+    let yamlValue = toYamlValue(value);
+    if (key === "name" && typeof value === "string") {
+      yamlValue = `"${value}"`;
+    }
     if (first) {
       lines.push(`  - ${key}: ${yamlValue}`);
       first = false;
@@ -393,6 +396,21 @@ function toYamlValue(value) {
   if (Array.isArray(value)) return `[${value.join(",")}]`;
   if (typeof value === "string") return value;
   return String(value);
+}
+
+function formatCompactNode(node) {
+  const pairs = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (value === undefined) continue;
+    let formattedValue;
+    if (typeof value === "boolean") formattedValue = value ? "true" : "false";
+    else if (typeof value === "number") formattedValue = String(value);
+    else if (Array.isArray(value)) formattedValue = `[${value.join(",")}]`;
+    else if (typeof value === "string") formattedValue = key === "name" ? `"${value}"` : value;
+    else formattedValue = String(value);
+    pairs.push(`${key}:${formattedValue}`);
+  }
+  return `{${pairs.join(",")}}`;
 }
 
 function injectClashNodesIntoTemplate(template, clashNodes, proxyNames) {
