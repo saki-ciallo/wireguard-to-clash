@@ -1,11 +1,9 @@
 const DEFAULT_SUBUPTIME = 6;
+const COMPACT_OUTPUT = true; // true: 紧凑JSON格式 {"name":"..."}, false: 标准YAML格式
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const userAgentHeader = request.headers.get("User-Agent") || "";
-    const userAgent = userAgentHeader.toLowerCase();
-    const compactOutput = (env.COMPACT_OUTPUT || "").toLowerCase() === "true";
     const accessToken = env.TOKEN || "";
     const requestToken = url.searchParams.get("token") || url.searchParams.get("pwd") || "";
     const isAuthorized = !accessToken || requestToken === accessToken || url.pathname === `/${accessToken}`;
@@ -42,14 +40,14 @@ export default {
     const proxyNames = [];
     const usedNames = new Set();
 
-    const sortedLinks = wireguardLinks
-      .map((link, index) => ({ link, index, parsed: parseWireGuardLink(link) }))
-      .filter((item) => item.parsed)
-      .sort((a, b) => compareWireGuardNames(a.parsed.name, b.parsed.name, a.index, b.index));
+    for (let index = 0; index < wireguardLinks.length; index++) {
+      const parsedLink = parseWireGuardLink(wireguardLinks[index]);
+      if (!parsedLink) {
+        continue;
+      }
 
-    for (const item of sortedLinks) {
-      const uniqueName = makeUniqueProxyName(item.parsed.name, usedNames, item.index);
-      const [proxyName, clashNode] = buildClashNode({ ...item.parsed, name: uniqueName }, compactOutput);
+      const uniqueName = makeUniqueProxyName(parsedLink.name, usedNames, index);
+      const [proxyName, clashNode] = buildClashNode({ ...parsedLink, name: uniqueName });
 
       if (proxyName && clashNode) {
         parsedNodes.push(clashNode);
@@ -83,9 +81,7 @@ export default {
     return new Response(clashConfig, {
       status: 200,
       headers: {
-        // Clash / Mihomo 客户端返回 yaml，其他客户端返回 plain
-        // "Content-Type": "text/plain; charset=utf-8",
-        "Content-Type": (userAgent.includes("clash") || userAgent.includes("mihomo") || userAgent.includes("meta")) ? "text/yaml; charset=utf-8" : "text/plain; charset=utf-8",
+        "Content-Type": "text/yaml; charset=utf-8",
         "Profile-Update-Interval": `${env.SUBUPTIME || DEFAULT_SUBUPTIME}`,
         "Profile-web-page-url": request.url.includes("?") ? request.url.split("?")[0] : request.url
       }
@@ -138,50 +134,24 @@ function parseWireGuardLinkList(text) {
   const links = raw
     .split(/\r?\n|\|/)
     .map((item) => item.trim())
-    .filter((item) => {
-      const lower = item.toLowerCase();
-      return lower.startsWith("wireguard://") || lower.startsWith("wg://");
-    });
+    .filter((item) => item.toLowerCase().startsWith("wireguard://"));
 
   return [...new Set(links)];
 }
 
 function parseWireGuardLink(link) {
   const cleanedLink = (link || "").trim();
-  const lowerLink = cleanedLink.toLowerCase();
-  const isWireGuard = lowerLink.startsWith("wireguard://");
-  const isWg = lowerLink.startsWith("wg://");
-  if (!isWireGuard && !isWg) {
+  if (!cleanedLink.toLowerCase().startsWith("wireguard://")) {
     return null;
   }
 
   try {
     const parsedUrl = new URL(cleanedLink);
-    const sp = parsedUrl.searchParams;
-
-    const addressInfo = parseWireGuardAddress(
-      decodeSafe(sp.get("address") || sp.get("ip") || "")
-    );
-    const reserved = parseWireGuardReserved(decodeSafe(sp.get("reserved") || ""));
-
-    let privateKey = decodeSafe(parsedUrl.username || "");
-    if (!privateKey) {
-      privateKey = decodeSafe(sp.get("privatekey") || sp.get("privateKey") || "");
-    }
-
-    const publicKey = decodeSafe(sp.get("publickey") || sp.get("publicKey") || "");
-    const presharedKey = decodeSafe(sp.get("presharedkey") || sp.get("presharedKey") || "");
-    const flag = decodeSafe(sp.get("flag") || "");
-    const dns = parseWireGuardDns(decodeSafe(sp.get("dns") || ""));
-    const persistentKeepalive = parseWireGuardKeepalive(sp.get("keepalive") || sp.get("persistentKeepalive") || sp.get("persistent-keepalive") || "");
-
-    const rawUdp = sp.get("udp");
-    const udp = rawUdp === null ? true : rawUdp === "1" || rawUdp.toLowerCase() === "true";
-
-    let remark = decodeSafe((parsedUrl.hash || "").replace(/^#/, ""));
-    if (!remark) {
-      remark = flag ? `${flag}-${parsedUrl.hostname}` : `wireguard-${parsedUrl.hostname}:${parsedUrl.port}`;
-    }
+    const addressInfo = parseWireGuardAddress(decodeSafe(parsedUrl.searchParams.get("address") || ""));
+    const reserved = parseWireGuardReserved(decodeSafe(parsedUrl.searchParams.get("reserved") || ""));
+    const privateKey = decodeSafe(parsedUrl.username || "");
+    const publicKey = decodeSafe(parsedUrl.searchParams.get("publickey") || parsedUrl.searchParams.get("publicKey") || "");
+    const remark = decodeSafe((parsedUrl.hash || "").replace(/^#/, "")) || `wireguard-${parsedUrl.hostname}:${parsedUrl.port}`;
 
     return {
       name: remark,
@@ -189,71 +159,30 @@ function parseWireGuardLink(link) {
       port: Number(parsedUrl.port || 0),
       privateKey,
       publicKey,
-      presharedKey,
       ip: addressInfo.ip,
       ipv6: addressInfo.ipv6,
-      dns,
-      persistentKeepalive,
-      mtu: Number(sp.get("mtu") || 1280),
-      reserved,
-      udp
+      mtu: Number(parsedUrl.searchParams.get("mtu") || 1280),
+      reserved
     };
   } catch (error) {
-    let match;
-    if (isWireGuard) {
-      match = cleanedLink.match(/^wireguard:\/\/([^@]+)@([^/?#]+)(?::(\d+))?\/?\?(.*?)(?:#(.*))?$/i);
-    } else {
-      match = cleanedLink.match(/^wg:\/\/([^/?#]+)(?::(\d+))?\/?\?(.*?)(?:#(.*))?$/i);
-    }
+    const match = cleanedLink.match(/^wireguard:\/\/([^@]+)@([^/?#]+)(?::(\d+))?\/?\?(.*?)(?:#(.*))?$/i);
     if (!match) {
       return null;
     }
 
-    const queryIndex = isWireGuard ? 4 : 3;
-    const query = new URLSearchParams(match[queryIndex] || "");
-    const addressInfo = parseWireGuardAddress(
-      decodeSafe(query.get("address") || query.get("ip") || "")
-    );
-
-    let privateKey;
-    if (isWireGuard) {
-      privateKey = decodeSafe(match[1] || "");
-    } else {
-      privateKey = decodeSafe(query.get("privatekey") || query.get("privateKey") || "");
-    }
-
-    const publicKey = decodeSafe(query.get("publickey") || query.get("publicKey") || "");
-    const presharedKey = decodeSafe(query.get("presharedkey") || query.get("presharedKey") || "");
-    const flag = decodeSafe(query.get("flag") || "");
-    const dns = parseWireGuardDns(decodeSafe(query.get("dns") || ""));
-    const persistentKeepalive = parseWireGuardKeepalive(query.get("keepalive") || query.get("persistentKeepalive") || query.get("persistent-keepalive") || "");
-
-    const rawUdp = query.get("udp");
-    const udp = rawUdp === null ? true : rawUdp === "1" || rawUdp.toLowerCase() === "true";
-
-    const serverIndex = isWireGuard ? 2 : 1;
-    const portIndex = isWireGuard ? 3 : 2;
-    const hashIndex = isWireGuard ? 5 : 4;
-
-    let remark = decodeSafe(match[hashIndex] || "");
-    if (!remark) {
-      remark = flag ? `${flag}-${match[serverIndex]}` : `wireguard-${match[serverIndex]}:${match[portIndex] || 0}`;
-    }
+    const query = new URLSearchParams(match[4] || "");
+    const addressInfo = parseWireGuardAddress(decodeSafe(query.get("address") || ""));
 
     return {
-      name: remark,
-      server: match[serverIndex],
-      port: Number(match[portIndex] || 0),
-      privateKey,
-      publicKey,
-      presharedKey,
+      name: decodeSafe(match[5] || "") || `wireguard-${match[2]}:${match[3] || 0}`,
+      server: match[2],
+      port: Number(match[3] || 0),
+      privateKey: decodeSafe(match[1] || ""),
+      publicKey: decodeSafe(query.get("publickey") || query.get("publicKey") || ""),
       ip: addressInfo.ip,
       ipv6: addressInfo.ipv6,
-      dns,
-      persistentKeepalive,
       mtu: Number(query.get("mtu") || 1280),
-      reserved: parseWireGuardReserved(decodeSafe(query.get("reserved") || "")),
-      udp
+      reserved: parseWireGuardReserved(decodeSafe(query.get("reserved") || ""))
     };
   }
 }
@@ -279,24 +208,6 @@ function parseWireGuardReserved(reserved) {
     .filter((item) => Number.isFinite(item));
 }
 
-function parseWireGuardDns(dns) {
-  const values = (dns || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return values.length > 0 ? values : undefined;
-}
-
-function parseWireGuardKeepalive(value) {
-  const text = (value || "").trim();
-  if (!text) {
-    return undefined;
-  }
-
-  const keepalive = Number(text);
-  return Number.isFinite(keepalive) ? keepalive : undefined;
-}
-
 function decodeSafe(text) {
   try {
     return decodeURIComponent(text);
@@ -319,43 +230,7 @@ function makeUniqueProxyName(name, usedNames, index) {
   return uniqueName;
 }
 
-function compareWireGuardNames(a, b, indexA, indexB) {
-  const keyA = getWireGuardSortKey(a, indexA);
-  const keyB = getWireGuardSortKey(b, indexB);
-
-  if (keyA.group !== keyB.group) {
-    return keyA.group - keyB.group;
-  }
-
-  const nameCompare = keyA.prefix.localeCompare(keyB.prefix, "en", {
-    numeric: true,
-    sensitivity: "base"
-  });
-
-  if (nameCompare !== 0) {
-    return nameCompare;
-  }
-
-  return indexA - indexB;
-}
-
-function getWireGuardSortKey(name, index) {
-  const text = (name || "").trim() || `wireguard-${index + 1}`;
-  const prefixMatch = text.match(/^[A-Za-z0-9]+/);
-  const prefix = prefixMatch ? prefixMatch[0] : text;
-  const firstChar = prefix.charAt(0);
-
-  let group = 2;
-  if (/^[A-Za-z]/.test(firstChar)) {
-    group = 0;
-  } else if (/^[0-9]/.test(firstChar)) {
-    group = 1;
-  }
-
-  return { group, prefix: prefix.toLowerCase() };
-}
-
-function buildClashNode(wireguard, compactOutput) {
+function buildClashNode(wireguard) {
   const name = wireguard.name || `wg-${wireguard.server}:${wireguard.port}`;
   const node = {
     name: `${name}`,
@@ -366,8 +241,8 @@ function buildClashNode(wireguard, compactOutput) {
     "private-key": `${wireguard.privateKey || ""}`,
     "public-key": `${wireguard.publicKey || ""}`,
     reserved: Array.isArray(wireguard.reserved) && wireguard.reserved.length > 0 ? wireguard.reserved : undefined,
-    udp: wireguard.udp !== false,
-    "remote-dns-resolve": !!wireguard.dns,
+    udp: true,
+    "remote-dns-resolve": false,
     mtu: Number(wireguard.mtu || 1280)
   };
 
@@ -375,22 +250,25 @@ function buildClashNode(wireguard, compactOutput) {
     node.ipv6 = `${wireguard.ipv6}`;
   }
 
-  if (wireguard.presharedKey) {
-    node["pre-shared-key"] = `${wireguard.presharedKey}`;
-  }
-
-  if (wireguard.dns) {
-    node.dns = wireguard.dns;
-  }
-
-  if (wireguard.persistentKeepalive !== undefined) {
-    node["persistent-keepalive"] = wireguard.persistentKeepalive;
-  }
-
-  return [name, compactOutput
+  return [name, COMPACT_OUTPUT
     ? `  - ${formatCompactNode(node)}`
     : formatYamlNode(node)
   ];
+}
+
+function formatCompactNode(node) {
+  const pairs = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (value === undefined) continue;
+    let formattedValue;
+    if (typeof value === "boolean") formattedValue = value ? "true" : "false";
+    else if (typeof value === "number") formattedValue = String(value);
+    else if (Array.isArray(value)) formattedValue = `[${value.join(",")}]`;
+    else if (typeof value === "string") formattedValue = `"${value}"`;
+    else formattedValue = String(value);
+    pairs.push(`${key}:${formattedValue}`);
+  }
+  return `{${pairs.join(",")}}`;
 }
 
 function formatYamlNode(node) {
@@ -398,10 +276,7 @@ function formatYamlNode(node) {
   let first = true;
   for (const [key, value] of Object.entries(node)) {
     if (value === undefined) continue;
-    let yamlValue = toYamlValue(value);
-    if (key === "name" && typeof value === "string") {
-      yamlValue = `"${value}"`;
-    }
+    const yamlValue = toYamlValue(value);
     if (first) {
       lines.push(`  - ${key}: ${yamlValue}`);
       first = false;
@@ -416,23 +291,8 @@ function toYamlValue(value) {
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return String(value);
   if (Array.isArray(value)) return `[${value.join(",")}]`;
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return `"${value}"`;
   return String(value);
-}
-
-function formatCompactNode(node) {
-  const pairs = [];
-  for (const [key, value] of Object.entries(node)) {
-    if (value === undefined) continue;
-    let formattedValue;
-    if (typeof value === "boolean") formattedValue = value ? "true" : "false";
-    else if (typeof value === "number") formattedValue = String(value);
-    else if (Array.isArray(value)) formattedValue = `[${value.join(",")}]`;
-    else if (typeof value === "string") formattedValue = key === "name" ? `"${value}"` : value;
-    else formattedValue = String(value);
-    pairs.push(`${key}:${formattedValue}`);
-  }
-  return `{${pairs.join(",")}}`;
 }
 
 function injectClashNodesIntoTemplate(template, clashNodes, proxyNames) {
