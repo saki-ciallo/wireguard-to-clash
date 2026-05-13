@@ -1,5 +1,5 @@
 const DEFAULT_SUBUPTIME = 6;
-const COMPACT_OUTPUT = true; // true: 紧凑JSON格式 {"name":"..."}, false: 标准YAML格式
+const COMPACT_OUTPUT = false; // true: 紧凑JSON格式 {"name":"..."}, false: 标准YAML格式
 
 export default {
   async fetch(request, env) {
